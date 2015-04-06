@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title>robot r71</title>
+    <style>
+        body{
+            margin: 0;
+            overflow: hidden;
+        }</style>
+</head>
+<body>
+<script type = "text/javascript" src ="js/three.js"></script>
+<script src="js/Detector.js"></script>
+<script type = "text/javascript" src = "js/stats.min.js"></script>
+<script type = "text/javascript" src = "js/OrbitControls.js"></script>
+<script type = "text/javascript" src = "js/KeyboardState.js"></script>
+<script type = "text/javascript" src = "js/gamepad.js"></script>
+<script>
+    var scene, camera, renderer;
+    var geometry, material, mesh;
+    var axes;
+    var stats = new Stats();;
+    var light;
+    var floor;
+    var floorMaterial;
+    var floorGeometry;
+    var contorls;//
+    //normal
+    var clock = new THREE.Clock();
+    var keyboard = new KeyboardState();
+    var android;
+    var animOffset       = 0,   // starting frame of animation
+            walking         = false,
+            duration        = 1000, // milliseconds to complete animation
+            keyframes       = 20,   // total number of animation frames
+            interpolation   = duration / keyframes, // milliseconds per frame
+            lastKeyframe    = 0,    // previous keyframe
+            currentKeyframe = 0;
+    //sth new
+
+
+    init();
+    animate();
+    //main()
+
+    function init(){
+        renderer = new THREE.WebGLRenderer();
+        renderer.setSize( window.innerWidth, window.innerHeight );
+        renderer.setClearColor( 0xEEEE00 );
+        //渲染器
+
+        scene = new THREE.Scene();
+        //场景
+
+        axes = new THREE.AxisHelper( 20 );
+        scene.add(axes);
+        //辅助坐标
+
+        stats.setMode(0);
+        stats.domElement.style.position = 'absolute';
+        stats.domElement.style.left = '0px';
+        stats.domElement.style.top = '0px';
+        document.body.appendChild( stats.domElement );
+        //fps监视
+
+        var VIEW_ANGLE = 45, ASPECT = window.innerWidth / window.innerHeight, NEAR = 0.1, FAR = 1000;
+        camera = new THREE.PerspectiveCamera( VIEW_ANGLE,ASPECT , NEAR,  FAR);
+        camera.position.set(0,15,40);
+        scene.add(camera);
+        camera.lookAt(scene.position);
+        //摄影机
+
+        controls = new THREE.OrbitControls( camera, renderer.domElement );
+        //控制器
+        geometry = new THREE.BoxGeometry( 10, 10, 10 );
+        material = new THREE.MeshLambertMaterial( { color: 0x00FFFF } );
+        mesh = new THREE.Mesh( geometry, material );
+        mesh.position.y = 2;
+        scene.add( mesh );
+//        //盒子
+
+
+        var floorTexture = new THREE.ImageUtils.loadTexture( 'images/checkerboard.jpg' );
+        floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+        floorTexture.repeat.set( 10, 10 );
+        var floorMaterial = new THREE.MeshBasicMaterial( { map: floorTexture, side: THREE.DoubleSide } );
+
+        floorGeometry = new THREE.PlaneBufferGeometry(100, 100, 10, 10);
+
+        floor = new THREE.Mesh(floorGeometry, floorMaterial);
+
+        floor.position.x = 0.5;
+        floor.position.y = 0;
+        floor.position.z = 0;
+        floor.rotation.x = -0.5*Math.PI ;
+        scene.add(floor);
+        //地面
+
+        var skyBoxGeometry = new THREE.BoxGeometry( 1000, 1000, 1000 );
+        var skyBoxMaterial = new THREE.MeshBasicMaterial( { color: 0x9999ff, side: THREE.BackSide } );
+        var skyBox = new THREE.Mesh( skyBoxGeometry, skyBoxMaterial );
+        scene.add(skyBox);
+//        //天空盒
+
+        scene.fog = new THREE.FogExp2( 0x9999ff, 0.00025 );
+//        //雾化
+
+
+        var spotLight = new THREE.SpotLight( 0xffffff );
+        spotLight.position.set( -40, 60, -10 );
+        scene.add( spotLight );
+
+        var jsonLoader = new THREE.JSONLoader();
+        jsonLoader.load( "js/android-animations.js", addModelToScene );
+//        //读取模型数据并调用addmodeToScene()
+        var ambientLight = new THREE.AmbientLight(0x111111);
+        scene.add(ambientLight);
+//        //环境光
+        document.body.appendChild( renderer.domElement );
+
+
+
+        }
+    function animate()
+    {
+        requestAnimationFrame( animate );
+        render();
+        update();
+    }
+
+    //animate()
+    function render()
+    {
+        if ( android && walking ) // exists / is loaded
+        {
+            // Alternate morph targets
+            time = new Date().getTime() % duration;
+            keyframe = Math.floor( time / interpolation ) + animOffset;
+            if ( keyframe != currentKeyframe )
+            {
+                android.morphTargetInfluences[ lastKeyframe ] = 0;
+                android.morphTargetInfluences[ currentKeyframe ] = 1;
+                android.morphTargetInfluences[ keyframe ] = 0;
+                lastKeyframe = currentKeyframe;
+                currentKeyframe = keyframe;
+            }
+            android.morphTargetInfluences[ keyframe ] =
+                    ( time % interpolation ) / interpolation;
+            android.morphTargetInfluences[ lastKeyframe ] =
+                    1 - android.morphTargetInfluences[ keyframe ];
+        }
+
+        renderer.render( scene, camera );
+    }
+
+    function update()
+    {
+         //delta = change in time since last call (seconds)
+        delta = clock.getDelta();
+        var moveDistance = 100 * delta;
+        walking = false;
+
+        if (Gamepad.supported)
+        {
+            var pads = Gamepad.getStates();
+            var pad = pads[0]; // assume only 1 player.
+            if (pad)
+            {
+
+                // adjust for deadzone.
+                if (Math.abs(pad.leftStickX + pad.rightStickX) > 0.3)
+                {
+                    android.rotation.y -= delta * (pad.leftStickX + pad.rightStickX);
+                    walking = true;
+                }
+                if (Math.abs(pad.leftStickY + pad.rightStickY) > 0.2)
+                {
+                    android.translateZ( -moveDistance * (pad.leftStickY + pad.rightStickY) );
+                    walking = true;
+                }
+                if ( pad.faceButton0 || pad.faceButton1 || pad.faceButton2 || pad.faceButton3 || pad.select || pad.start )
+                {
+                    android.position.set(0,0,0);
+                    android.rotation.set(0,0,0);
+                }
+
+            }
+        }
+        if ( keyboard.down("R") )
+            mesh.material.color = new THREE.Color(0xff0000);
+        if ( keyboard.up("R") )
+            mesh.material.color = new THREE.Color(0x0000ff);
+        // move forwards / backwards
+        if ( keyboard.pressed("down") )
+            android.translateZ( -moveDistance );
+
+        if ( keyboard.pressed("up") )
+            android.translateZ(  moveDistance );
+        // rotate left/right
+        if ( keyboard.pressed("left") )
+            android.rotation.y += delta;
+        if ( keyboard.pressed("right") )
+            android.rotation.y -= delta;
+
+        var walkingKeys = ["up", "down", "left", "right"];
+        for (var i = 0; i < walkingKeys.length; i++)
+        {
+            if ( keyboard.pressed(walkingKeys[i]) )
+                walking = true;
+        }
+
+        controls.update();
+        mesh.rotation.x +=0.1;
+        mesh.rotation.y +=0.1;
+        keyboard.update();
+        stats.update();
+    }
+    //update()
+    function addModelToScene( geometry, materials )
+    {
+        // for preparing animation
+        for (var i = 0; i < materials.length; i++)
+            materials[i].morphTargets = true;
+
+        var material = new THREE.MeshFaceMaterial( materials );
+        android = new THREE.Mesh( geometry, material );
+        android.scale.set(1,1,1);
+        scene.add( android );
+    }
+    //addMode1ToScene()
+
+
+
+
+
+</script>
+
+
+</body>
+</html>
